@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+
+  task-platform-api:
+    build:
+      context: ..
+      dockerfile: docker/application/Dockerfile
+    container_name: task-platform-api
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: "production"
+    restart: always

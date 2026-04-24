@@ -1,0 +1,39 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "enterprise-task-platform"
+        IMAGE_TAG = "latest"
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git url: 'https://github.com/fred2030/enterprise-task-management-platform.git', branch: 'main'
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                sh 'cd app && ./mvnw clean package -DskipTests'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $IMAGE_NAME:$IMAGE_TAG -f docker/application/Dockerfile .'
+            }
+        }
+
+        stage('Run Container') {
+            steps {
+                sh '''
+                docker stop task-platform || true
+                docker rm task-platform || true
+                docker run -d -p 8080:8080 --name task-platform $IMAGE_NAME:$IMAGE_TAG
+                '''
+            }
+        }
+    }
+}
