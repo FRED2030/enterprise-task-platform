@@ -7,6 +7,8 @@ resource "aws_instance" "task_platform_server" {
   subnet_id              = aws_subnet.public_subnet.id
   vpc_security_group_ids = [aws_security_group.task_platform_sg.id]
 
+  associate_public_ip_address = true   
+i
   tags = {
     Name = "task-platform-server"
   }
