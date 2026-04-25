@@ -1,14 +1,15 @@
 pipeline {
-    agent {
-        docker {
-            image 'docker:latest'
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
-        }
-    }
+    agent any
 
     environment {
         IMAGE_NAME = "enterprise-task-platform"
         IMAGE_TAG = "latest"
+        CONTAINER_NAME = "task-platform"
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
     }
 
     stages {
@@ -31,10 +32,29 @@ pipeline {
             }
         }
 
+        stage('Unit Tests (Optional Gate)') {
+            steps {
+                sh '''
+                cd app
+                ./mvnw test
+                '''
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 sh '''
+                docker --version
                 docker build -t $IMAGE_NAME:$IMAGE_TAG -f docker/application/Dockerfile .
+                '''
+            }
+        }
+
+        stage('Stop Old Container') {
+            steps {
+                sh '''
+                docker stop $CONTAINER_NAME || true
+                docker rm $CONTAINER_NAME || true
                 '''
             }
         }
@@ -42,11 +62,35 @@ pipeline {
         stage('Run Container') {
             steps {
                 sh '''
-                docker stop task-platform || true
-                docker rm task-platform || true
-                docker run -d -p 8080:8080 --name task-platform $IMAGE_NAME:$IMAGE_TAG
+                docker run -d \
+                -p 8080:8080 \
+                --name $CONTAINER_NAME \
+                $IMAGE_NAME:$IMAGE_TAG
                 '''
             }
+        }
+
+        stage('Health Check') {
+            steps {
+                sh '''
+                sleep 10
+                curl -f http://localhost:8080 || exit 1
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Deployment successful"
+        }
+
+        failure {
+            echo "❌ Pipeline failed"
+        }
+
+        always {
+            cleanWs()
         }
     }
 }
