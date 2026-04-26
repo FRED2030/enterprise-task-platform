@@ -7,32 +7,33 @@ pipeline {
         CONTAINER_NAME = "task-platform"
     }
 
-    options {
-        timestamps()
-        disableConcurrentBuilds()
-    }
-
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
                 git branch: 'main',
-                url: 'https://github.com/fred2030/enterprise-task-platform.git'
+                    url: 'https://github.com/fred2030/enterprise-task-platform.git'
             }
         }
 
-       stage('Build Docker Image') {
-    steps {
-        sh '''
-        docker build -t enterprise-task-platform:latest -f app/Dockerfile app
-        '''
-    }
-}
-
-        stage('Docker Build') {
+        stage('Build Application') {
             steps {
                 sh '''
-                docker build -t enterprise-task-platform:latest .
+                cd app
+                chmod +x mvnw
+                ./mvnw clean package -DskipTests
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                echo "Checking files..."
+                ls -R
+
+                echo "Building Docker image..."
+                docker build -t $IMAGE_NAME:$IMAGE_TAG -f app/Dockerfile app
                 '''
             }
         }
@@ -40,9 +41,10 @@ pipeline {
         stage('Run Local') {
             steps {
                 sh '''
-                docker stop task-platform || true
-                docker rm task-platform || true
-                docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
+                docker stop $CONTAINER_NAME || true
+                docker rm $CONTAINER_NAME || true
+
+                docker run -d -p 8080:8080 --name $CONTAINER_NAME $IMAGE_NAME:$IMAGE_TAG
                 '''
             }
         }
@@ -55,13 +57,16 @@ pipeline {
 
                     docker stop task-platform || true
                     docker rm task-platform || true
+                    docker rmi enterprise-task-platform:latest || true
 
                     rm -rf enterprise-task-platform || true
                     git clone https://github.com/fred2030/enterprise-task-platform.git
                     cd enterprise-task-platform
 
-                    docker build -t enterprise-task-platform:latest .
+                    docker build -t enterprise-task-platform:latest -f app/Dockerfile app
                     docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
+
+                    docker ps
 
                     EOF
                     '''
@@ -72,7 +77,7 @@ pipeline {
 
     post {
         success {
-            echo "SUCCESS"
+            echo "SUCCESS - App deployed"
         }
         failure {
             echo "FAILED"
