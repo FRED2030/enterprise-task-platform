@@ -16,10 +16,10 @@ public class TaskController {
         this.service = service;
     }
 
-    @GetMapping
-    public List<Task> getTasks() {
-        return service.getAllTasks();
-    }
+    @GetMapping("/")
+public String home() {
+    return "Task Platform is running. Visit /api/v1/tasks";
+}
 
     @PostMapping
     public Task createTask(@RequestBody Task task) {
