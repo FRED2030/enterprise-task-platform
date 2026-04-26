@@ -86,28 +86,25 @@ pipeline {
             }
         }
 
-        stage('Deploy to EC2') {
-            steps {
-                sh '''
-                ssh -o StrictHostKeyChecking=no -i task-platform-key ubuntu@35.73.226.44 << EOF
+      stage('Deploy to EC2') {
+          steps {
+       sshagent(['ec2-key']) {
+    sh '''
+    ssh -o StrictHostKeyChecking=no ubuntu@3.114.16.111 << EOF
 
-                docker stop task-platform || true
-                docker rm task-platform || true
-                docker rmi enterprise-task-platform:latest || true
+    docker stop task-platform || true
+    docker rm task-platform || true
 
-                rm -rf enterprise-task-platform || true
-                git clone https://github.com/fred2030/enterprise-task-platform.git
-                cd enterprise-task-platform
+    rm -rf enterprise-task-platform || true
+    git clone https://github.com/fred2030/enterprise-task-platform.git
+    cd enterprise-task-platform
 
-                docker build -t enterprise-task-platform:latest .
-                docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
+    docker build -t enterprise-task-platform:latest .
+    docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
 
-                docker ps
-                EOF
-                '''
-            }
-        }
-    }
+    EOF
+    '''
+}
 
     post {
         success {
