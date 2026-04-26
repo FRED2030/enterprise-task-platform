@@ -21,15 +21,13 @@ pipeline {
             }
         }
 
-        stage('Build') {
-            steps {
-                sh '''
-                cd app
-                chmod +x mvnw
-                ./mvnw clean package -DskipTests
-                '''
-            }
-        }
+       stage('Build Docker Image') {
+    steps {
+        sh '''
+        docker build -t enterprise-task-platform:latest -f app/Dockerfile app
+        '''
+    }
+}
 
         stage('Docker Build') {
             steps {
