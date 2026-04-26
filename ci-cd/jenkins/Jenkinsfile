@@ -10,20 +10,18 @@ pipeline {
     options {
         timestamps()
         disableConcurrentBuilds()
-        buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                cleanWs()
                 git branch: 'main',
-                    url: 'https://github.com/fred2030/enterprise-task-platform.git'
+                url: 'https://github.com/fred2030/enterprise-task-platform.git'
             }
         }
 
-        stage('Build Application') {
+        stage('Build') {
             steps {
                 sh '''
                 cd app
@@ -33,88 +31,53 @@ pipeline {
             }
         }
 
-        stage('Unit Tests') {
+        stage('Docker Build') {
             steps {
                 sh '''
-                cd app
-                ./mvnw test
+                docker build -t enterprise-task-platform:latest .
                 '''
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Run Local') {
             steps {
                 sh '''
-                if [ -f Dockerfile ]; then
-                    docker build -t $IMAGE_NAME:$IMAGE_TAG .
-                elif [ -f app/Dockerfile ]; then
-                    docker build -t $IMAGE_NAME:$IMAGE_TAG -f app/Dockerfile app
-                else
-                    echo "Dockerfile not found"
-                    exit 1
-                fi
+                docker stop task-platform || true
+                docker rm task-platform || true
+                docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
                 '''
             }
         }
 
-        stage('Stop Old Container') {
+        stage('Deploy to EC2') {
             steps {
-                sh '''
-                docker stop $CONTAINER_NAME || true
-                docker rm $CONTAINER_NAME || true
-                '''
+                sshagent(['ec2-key']) {
+                    sh '''
+                    ssh -o StrictHostKeyChecking=no ubuntu@3.114.16.111 << EOF
+
+                    docker stop task-platform || true
+                    docker rm task-platform || true
+
+                    rm -rf enterprise-task-platform || true
+                    git clone https://github.com/fred2030/enterprise-task-platform.git
+                    cd enterprise-task-platform
+
+                    docker build -t enterprise-task-platform:latest .
+                    docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
+
+                    EOF
+                    '''
+                }
             }
         }
-
-        stage('Run Container') {
-            steps {
-                sh '''
-                docker run -d \
-                --name $CONTAINER_NAME \
-                -p 8080:8080 \
-                $IMAGE_NAME:$IMAGE_TAG
-                '''
-            }
-        }
-
-        stage('Health Check') {
-            steps {
-                sh '''
-                sleep 10
-                docker logs $CONTAINER_NAME
-                '''
-            }
-        }
-
-      stage('Deploy to EC2') {
-          steps {
-       sshagent(['ec2-key']) {
-    sh '''
-    ssh -o StrictHostKeyChecking=no ubuntu@3.114.16.111 << EOF
-
-    docker stop task-platform || true
-    docker rm task-platform || true
-
-    rm -rf enterprise-task-platform || true
-    git clone https://github.com/fred2030/enterprise-task-platform.git
-    cd enterprise-task-platform
-
-    docker build -t enterprise-task-platform:latest .
-    docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
-
-    EOF
-    '''
-}
+    }
 
     post {
         success {
-            echo "Pipeline SUCCESS - Application deployed"
+            echo "SUCCESS"
         }
         failure {
-            echo "Pipeline FAILED - check logs"
-        }
-        always {
-            cleanWs()
+            echo "FAILED"
         }
     }
 }
