@@ -12,11 +12,11 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/fred2030/enterprise-task-platform.git'
+                url: 'https://github.com/fred2030/enterprise-task-platform.git'
             }
         }
 
-        stage('Build Application') {
+        stage('Build App') {
             steps {
                 sh '''
                 cd app
@@ -29,10 +29,6 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                echo "Checking files..."
-                ls -R
-
-                echo "Building Docker image..."
                 docker build -t $IMAGE_NAME:$IMAGE_TAG -f app/Dockerfile app
                 '''
             }
@@ -53,22 +49,16 @@ pipeline {
             steps {
                 sshagent(['ec2-key']) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no ubuntu@3.114.16.111 << EOF
-
-                    docker stop task-platform || true
-                    docker rm task-platform || true
-                    docker rmi enterprise-task-platform:latest || true
-
-                    rm -rf enterprise-task-platform || true
-                    git clone https://github.com/fred2030/enterprise-task-platform.git
-                    cd enterprise-task-platform
-
-                    docker build -t enterprise-task-platform:latest -f app/Dockerfile app
+                    ssh -o StrictHostKeyChecking=no ubuntu@3.114.16.111 "
+                    docker stop task-platform || true &&
+                    docker rm task-platform || true &&
+                    docker rmi enterprise-task-platform:latest || true &&
+                    rm -rf enterprise-task-platform || true &&
+                    git clone https://github.com/fred2030/enterprise-task-platform.git &&
+                    cd enterprise-task-platform &&
+                    docker build -t enterprise-task-platform:latest -f app/Dockerfile app &&
                     docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
-
-                    docker ps
-
-                    EOF
+                    "
                     '''
                 }
             }
