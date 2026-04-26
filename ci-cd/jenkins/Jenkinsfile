@@ -2,21 +2,30 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "enterprise-task-platform"
+        AWS_REGION = "ap-northeast-1"
+        ECR_REPO = "578109960340.dkr.ecr.ap-northeast-1.amazonaws.com/enterprise-task-platform"
         IMAGE_TAG = "latest"
         CONTAINER_NAME = "task-platform"
+        EC2_HOST = "57.182.249.113"
+        SSH_USER = "ubuntu"
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
+                cleanWs()
                 git branch: 'main',
-                url: 'https://github.com/fred2030/enterprise-task-platform.git'
+                    url: 'https://github.com/fred2030/enterprise-task-platform.git'
             }
         }
 
-        stage('Build App') {
+        stage('Build Application') {
             steps {
                 sh '''
                 cd app
@@ -29,48 +38,57 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                docker build -t $IMAGE_NAME:$IMAGE_TAG -f app/Dockerfile app
+                docker build -t $ECR_REPO:$IMAGE_TAG -f docker/application/Dockerfile .
                 '''
             }
         }
 
-        stage('Run Local') {
+        stage('Login to AWS ECR') {
             steps {
                 sh '''
-                docker stop $CONTAINER_NAME || true
-                docker rm $CONTAINER_NAME || true
+                aws ecr get-login-password --region $AWS_REGION \
+                | docker login --username AWS --password-stdin $ECR_REPO
+                '''
+            }
+        }
 
-                docker run -d -p 8080:8080 --name $CONTAINER_NAME $IMAGE_NAME:$IMAGE_TAG
+        stage('Push Image to ECR') {
+            steps {
+                sh '''
+                docker push $ECR_REPO:$IMAGE_TAG
                 '''
             }
         }
 
         stage('Deploy to EC2') {
             steps {
-                sshagent(['ec2-key']) {
-                    sh '''
-                    ssh -o StrictHostKeyChecking=no ubuntu@3.114.16.111 "
-                    docker stop task-platform || true &&
-                    docker rm task-platform || true &&
-                    docker rmi enterprise-task-platform:latest || true &&
-                    rm -rf enterprise-task-platform || true &&
-                    git clone https://github.com/fred2030/enterprise-task-platform.git &&
-                    cd enterprise-task-platform &&
-                    docker build -t enterprise-task-platform:latest -f app/Dockerfile app &&
-                    docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
-                    "
-                    '''
-                }
+                sh '''
+                ssh -o StrictHostKeyChecking=no -i task-platform-key $SSH_USER@$EC2_HOST << EOF
+
+                aws ecr get-login-password --region $AWS_REGION \
+                | docker login --username AWS --password-stdin $ECR_REPO
+
+                docker pull $ECR_REPO:$IMAGE_TAG
+
+                docker stop $CONTAINER_NAME || true
+                docker rm $CONTAINER_NAME || true
+
+                docker run -d -p 8080:8080 \
+                --name $CONTAINER_NAME \
+                $ECR_REPO:$IMAGE_TAG
+
+                EOF
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "SUCCESS - App deployed"
+            echo "✅ Deployment SUCCESS via ECR"
         }
         failure {
-            echo "FAILED"
+            echo "❌ Deployment FAILED"
         }
     }
 }
