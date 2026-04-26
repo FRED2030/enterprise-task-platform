@@ -106,6 +106,21 @@ pipeline {
             }
         }
     }
+    
+      stage('Deploy to EC2') {
+    steps {
+        sh '''
+        scp -o StrictHostKeyChecking=no -i task-platform-key \
+        docker/application/Dockerfile ubuntu@35.74.243.242:~
+
+        ssh -o StrictHostKeyChecking=no -i task-platform-key ubuntu@35.74.243.242 << EOF
+        docker stop task-platform || true
+        docker rm task-platform || true
+        docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
+        EOF
+        '''
+    }
+}
 
     post {
         success {
