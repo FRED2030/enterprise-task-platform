@@ -15,122 +15,42 @@ pipeline {
 
     stages {
 
-        stage('Checkout Code') {
-            steps {
-                cleanWs()
-                git branch: 'main',
-                    url: 'https://github.com/fred2030/enterprise-task-platform.git'
-            }
-        }
-
-        stage('Build Application') {
-            steps {
-                sh '''
-                cd app
-                chmod +x mvnw
-                ./mvnw clean package -DskipTests
-                '''
-            }
-        }
-
-        stage('Unit Tests') {
-            steps {
-                sh '''
-                cd app
-                ./mvnw test
-                '''
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                sh '''
-                echo "Checking Docker..."
-                docker --version
-
-                echo "Building Docker image..."
-
-                # FIX: safe Dockerfile detection
-                if [ -f Dockerfile ]; then
-                    docker build -t $IMAGE_NAME:$IMAGE_TAG -f Dockerfile .
-                elif [ -f app/Dockerfile ]; then
-                    docker build -t $IMAGE_NAME:$IMAGE_TAG -f app/Dockerfile app
-                else
-                    echo "❌ Dockerfile not found"
-                    exit 1
-                fi
-                '''
-            }
-        }
-
-        stage('Stop Old Container') {
-            steps {
-                sh '''
-                echo "Cleaning old container if exists..."
-
-                docker ps -q --filter "name=$CONTAINER_NAME" | xargs -r docker stop
-                docker ps -aq --filter "name=$CONTAINER_NAME" | xargs -r docker rm
-
-                docker stop $CONTAINER_NAME || true
-                docker rm $CONTAINER_NAME || true
-                '''
-            }
-        }
-
-        stage('Run Container') {
-            steps {
-                sh '''
-                echo "Starting new container..."
-
-                docker run -d \
-                --name $CONTAINER_NAME \
-                -P \
-                $IMAGE_NAME:$IMAGE_TAG
-
-                docker ps
-                '''
-            }
-        }
+        // ... your existing stages ...
 
         stage('Health Check') {
             steps {
                 sh '''
                 echo "Waiting for app to start..."
                 sleep 10
-
-                echo "Checking running container..."
                 docker logs $CONTAINER_NAME
+                '''
+            }
+        }
 
-                echo "Health check passed (basic log validation)"
+        // ✅ MOVE IT HERE
+        stage('Deploy to EC2') {
+            steps {
+                sh '''
+                scp -o StrictHostKeyChecking=no -i task-platform-key \
+                docker/application/Dockerfile ubuntu@35.73.226.44:~
+
+                ssh -o StrictHostKeyChecking=no -i task-platform-key ubuntu@35.73.226.44 << EOF
+                docker stop task-platform || true
+                docker rm task-platform || true
+                docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
+                EOF
                 '''
             }
         }
     }
-    
-      stage('Deploy to EC2') {
-    steps {
-        sh '''
-        scp -o StrictHostKeyChecking=no -i task-platform-key \
-        docker/application/Dockerfile ubuntu@35.73.226.44:~
-
-        ssh -o StrictHostKeyChecking=no -i task-platform-key ubuntu@35.73.226.44 << EOF
-        docker stop task-platform || true
-        docker rm task-platform || true
-        docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
-        EOF
-        '''
-    }
-}
 
     post {
         success {
             echo "✅ Pipeline SUCCESS - Application deployed"
         }
-
         failure {
             echo "❌ Pipeline FAILED - check logs"
         }
-
         always {
             cleanWs()
         }
