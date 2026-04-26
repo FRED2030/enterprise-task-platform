@@ -15,58 +15,106 @@ pipeline {
 
     stages {
 
-        // ... your existing stages ...
+        stage('Checkout Code') {
+            steps {
+                cleanWs()
+                git branch: 'main',
+                    url: 'https://github.com/fred2030/enterprise-task-platform.git'
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                sh '''
+                cd app
+                chmod +x mvnw
+                ./mvnw clean package -DskipTests
+                '''
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh '''
+                cd app
+                ./mvnw test
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                if [ -f Dockerfile ]; then
+                    docker build -t $IMAGE_NAME:$IMAGE_TAG .
+                elif [ -f app/Dockerfile ]; then
+                    docker build -t $IMAGE_NAME:$IMAGE_TAG -f app/Dockerfile app
+                else
+                    echo "Dockerfile not found"
+                    exit 1
+                fi
+                '''
+            }
+        }
+
+        stage('Stop Old Container') {
+            steps {
+                sh '''
+                docker stop $CONTAINER_NAME || true
+                docker rm $CONTAINER_NAME || true
+                '''
+            }
+        }
+
+        stage('Run Container') {
+            steps {
+                sh '''
+                docker run -d \
+                --name $CONTAINER_NAME \
+                -p 8080:8080 \
+                $IMAGE_NAME:$IMAGE_TAG
+                '''
+            }
+        }
 
         stage('Health Check') {
             steps {
                 sh '''
-                echo "Waiting for app to start..."
                 sleep 10
                 docker logs $CONTAINER_NAME
                 '''
             }
         }
 
-       stage('Deploy to EC2') {
-           steps {
-              sh '''
-        echo "Deploying to EC2..."
+        stage('Deploy to EC2') {
+            steps {
+                sh '''
+                ssh -o StrictHostKeyChecking=no -i task-platform-key ubuntu@35.73.226.44 << EOF
 
-        ssh -o StrictHostKeyChecking=no -i task-platform-key ubuntu@35.73.226.44 << EOF
+                docker stop task-platform || true
+                docker rm task-platform || true
+                docker rmi enterprise-task-platform:latest || true
 
-        echo "Stopping old container..."
-        docker stop task-platform || true
-        docker rm task-platform || true
+                rm -rf enterprise-task-platform || true
+                git clone https://github.com/fred2030/enterprise-task-platform.git
+                cd enterprise-task-platform
 
-        echo "Removing old image..."
-        docker rmi enterprise-task-platform:latest || true
+                docker build -t enterprise-task-platform:latest .
+                docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
 
-        echo "Rebuilding image on EC2..."
-
-        # clone repo fresh on EC2
-        rm -rf enterprise-task-platform || true
-        git clone https://github.com/fred2030/enterprise-task-platform.git
-        cd enterprise-task-platform
-
-        # build image
-        docker build -t enterprise-task-platform:latest .
-
-        echo "Starting container..."
-        docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
-
-        docker ps
-
-        EOF
-        '''
+                docker ps
+                EOF
+                '''
+            }
+        }
     }
-}
-       
+
     post {
         success {
-            echo "✅ Pipeline SUCCESS - Application deployed"
+            echo "Pipeline SUCCESS - Application deployed"
         }
         failure {
-            echo "❌ Pipeline FAILED - check logs"
+            echo "Pipeline FAILED - check logs"
         }
         always {
             cleanWs()
