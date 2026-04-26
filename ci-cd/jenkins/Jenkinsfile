@@ -27,23 +27,40 @@ pipeline {
             }
         }
 
-        // ✅ MOVE IT HERE
-        stage('Deploy to EC2') {
-            steps {
-                sh '''
-                scp -o StrictHostKeyChecking=no -i task-platform-key \
-                docker/application/Dockerfile ubuntu@35.73.226.44:~
+       stage('Deploy to EC2') {
+           steps {
+              sh '''
+        echo "Deploying to EC2..."
 
-                ssh -o StrictHostKeyChecking=no -i task-platform-key ubuntu@35.73.226.44 << EOF
-                docker stop task-platform || true
-                docker rm task-platform || true
-                docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
-                EOF
-                '''
-            }
-        }
+        ssh -o StrictHostKeyChecking=no -i task-platform-key ubuntu@35.73.226.44 << EOF
+
+        echo "Stopping old container..."
+        docker stop task-platform || true
+        docker rm task-platform || true
+
+        echo "Removing old image..."
+        docker rmi enterprise-task-platform:latest || true
+
+        echo "Rebuilding image on EC2..."
+
+        # clone repo fresh on EC2
+        rm -rf enterprise-task-platform || true
+        git clone https://github.com/fred2030/enterprise-task-platform.git
+        cd enterprise-task-platform
+
+        # build image
+        docker build -t enterprise-task-platform:latest .
+
+        echo "Starting container..."
+        docker run -d -p 8080:8080 --name task-platform enterprise-task-platform:latest
+
+        docker ps
+
+        EOF
+        '''
     }
-
+}
+       
     post {
         success {
             echo "✅ Pipeline SUCCESS - Application deployed"
