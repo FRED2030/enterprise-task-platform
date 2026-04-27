@@ -43,7 +43,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                docker build -t $ECR_REPO:$IMAGE_TAG -f docker/application/Dockerfile .
+               docker build -t 578109960340.dkr.ecr.ap-northeast-1.amazonaws.com/enterprise-task-platform:latest -f app/Dockerfile .
                 '''
             }
         }
