@@ -60,9 +60,7 @@ pipeline {
 
         stage('Push Image to ECR') {
             steps {
-                sh '''
-                docker push $ECR_REPO:$IMAGE_TAG
-                '''
+                sh 'docker push $ECR_REPO:$IMAGE_TAG'
             }
         }
 
@@ -70,17 +68,18 @@ pipeline {
             steps {
                 sshagent(['ec2-key']) {
                     sh '''
-                    ssh -o StrictHostKeyChecking=no ubuntu@52.195.19.156 << EOF
+                    ssh -o StrictHostKeyChecking=no $SSH_USER@$EC2_HOST << EOF
+                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin 578109960340.dkr.ecr.ap-northeast-1.amazonaws.com
                     docker pull $ECR_REPO:$IMAGE_TAG
-                    docker stop task-platform || true
-                    docker rm task-platform || true
-                    docker run -d -p 8080:8080 --name task-platform $ECR_REPO:$IMAGE_TAG
+                    docker stop $CONTAINER_NAME || true
+                    docker rm $CONTAINER_NAME || true
+                    docker run -d -p 8080:8080 --name $CONTAINER_NAME $ECR_REPO:$IMAGE_TAG
                     EOF
                     '''
                 }
             }
         }
-    }   // ✅ THIS WAS MISSING
+    }
 
     post {
         success {
