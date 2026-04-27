@@ -6,7 +6,7 @@ pipeline {
         ECR_REPO = "578109960340.dkr.ecr.ap-northeast-1.amazonaws.com/enterprise-task-platform"
         IMAGE_TAG = "latest"
         CONTAINER_NAME = "task-platform"
-        EC2_HOST = "57.182.249.113"
+        EC2_HOST = "52.195.19.156"
         SSH_USER = "ubuntu"
     }
 
@@ -66,27 +66,19 @@ pipeline {
         }
 
         stage('Deploy to EC2') {
-            steps {
-                sh '''
-                ssh -o StrictHostKeyChecking=no -i task-platform-key $SSH_USER@$EC2_HOST << EOF
-
-                aws ecr get-login-password --region $AWS_REGION \
-                | docker login --username AWS --password-stdin $ECR_REPO
-
-                docker pull $ECR_REPO:$IMAGE_TAG
-
-                docker stop $CONTAINER_NAME || true
-                docker rm $CONTAINER_NAME || true
-
-                docker run -d -p 8080:8080 \
-                --name $CONTAINER_NAME \
-                $ECR_REPO:$IMAGE_TAG
-
-                EOF
-                '''
-            }
+    steps {
+        sshagent(['ec2-key']) {
+            sh '''
+            ssh -o StrictHostKeyChecking=no ubuntu@52.195.19.156 << EOF
+            docker pull 578109960340.dkr.ecr.ap-northeast-1.amazonaws.com/enterprise-task-platform:latest
+            docker stop task-platform || true
+            docker rm task-platform || true
+            docker run -d -p 8080:8080 --name task-platform 578109960340.dkr.ecr.ap-northeast-1.amazonaws.com/enterprise-task-platform:latest
+            EOF
+            '''
         }
     }
+}
 
     post {
         success {
