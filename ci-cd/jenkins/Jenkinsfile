@@ -35,27 +35,28 @@ pipeline {
             }
         }
 
-       stage('Test Docker') {
-           steps {
-        sh 'docker ps'
-    }
-}
+        stage('Test Docker') {
+            steps {
+                sh 'docker ps'
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 sh '''
-               docker build -t 578109960340.dkr.ecr.ap-northeast-1.amazonaws.com/enterprise-task-platform:latest -f app/Dockerfile app
+                docker build -t $ECR_REPO:$IMAGE_TAG -f app/Dockerfile app
                 '''
             }
         }
 
         stage('Login to AWS ECR') {
-    steps {
-        sh '''
-        aws ecr get-login-password --region ap-northeast-1 | \
-        docker login --username AWS --password-stdin 578109960340.dkr.ecr.ap-northeast-1.amazonaws.com
-        '''
-    }
-}
+            steps {
+                sh '''
+                aws ecr get-login-password --region $AWS_REGION | \
+                docker login --username AWS --password-stdin 578109960340.dkr.ecr.ap-northeast-1.amazonaws.com
+                '''
+            }
+        }
 
         stage('Push Image to ECR') {
             steps {
@@ -66,19 +67,20 @@ pipeline {
         }
 
         stage('Deploy to EC2') {
-    steps {
-        sshagent(['ec2-key']) {
-            sh '''
-            ssh -o StrictHostKeyChecking=no ubuntu@52.195.19.156 << EOF
-            docker pull 578109960340.dkr.ecr.ap-northeast-1.amazonaws.com/enterprise-task-platform:latest
-            docker stop task-platform || true
-            docker rm task-platform || true
-            docker run -d -p 8080:8080 --name task-platform 578109960340.dkr.ecr.ap-northeast-1.amazonaws.com/enterprise-task-platform:latest
-            EOF
-            '''
+            steps {
+                sshagent(['ec2-key']) {
+                    sh '''
+                    ssh -o StrictHostKeyChecking=no ubuntu@52.195.19.156 << EOF
+                    docker pull $ECR_REPO:$IMAGE_TAG
+                    docker stop task-platform || true
+                    docker rm task-platform || true
+                    docker run -d -p 8080:8080 --name task-platform $ECR_REPO:$IMAGE_TAG
+                    EOF
+                    '''
+                }
+            }
         }
-    }
-}
+    }   // ✅ THIS WAS MISSING
 
     post {
         success {
