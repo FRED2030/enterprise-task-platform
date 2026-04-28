@@ -1,14 +1,32 @@
 version: "3.9"
 
 services:
-
-  task-platform-api:
+  app:
     build:
       context: ..
-      dockerfile: docker/application/Dockerfile
+      dockerfile: app/Dockerfile
     container_name: task-platform-api
     ports:
-      - "8080:8080"
-    environment:
-      SPRING_PROFILES_ACTIVE: "production"
-    restart: always
+      - "8082:8080"
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9091:9090"
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+
+  blackbox:
+    image: prom/blackbox-exporter
+    container_name: blackbox
+    ports:
+      - "9115:9115"

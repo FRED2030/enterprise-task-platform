@@ -1,29 +1,17 @@
-# ===== BUILD STAGE =====
+# Stage 1: Build
 FROM maven:3.9.6-eclipse-temurin-17 AS builder
-
-ENV JAVA_HOME=/opt/java/openjdk
-ENV PATH="$JAVA_HOME/bin:$PATH"
-
 WORKDIR /build
 
-COPY pom.xml .
-COPY src ./src
+COPY app/pom.xml .
+COPY app/src ./src
 
 RUN mvn clean package -DskipTests
 
-# ===== RUNTIME STAGE =====
+# Stage 2: Run
 FROM eclipse-temurin:17-jdk-alpine
-
 WORKDIR /app
-
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY --from=builder /build/target/*.jar app.jar
 
-RUN chown appuser:appgroup app.jar
-
-USER appuser
-
 EXPOSE 8080
-
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java","-jar","app.jar"]
